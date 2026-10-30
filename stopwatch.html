@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ecebe7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151513" media="(prefers-color-scheme: dark)">
+<meta name="description" content="랩 기록을 지원하는 스톱워치">
+<title>Stopwatch</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+  :root {
+    --paper: #ecebe7;
+    --panel: #f6f5f2;
+    --face: #fdfcfa;
+    --ink: #1c1c1e;
+    --ink-2: #636366;
+    --ink-3: #9a9893;
+    --rule: #dcdad4;
+    --signal: #ff5b1f;
+    --best: #248a3d;
+    --worst: #d1460c;
+    --tip-bg: #1c1c1e;
+    --tip-fg: #f5f5f7;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #151513;
+      --panel: #1e1e1c;
+      --face: #252523;
+      --ink: #f2f1ee;
+      --ink-2: #a9a7a1;
+      --ink-3: #74726c;
+      --rule: #353431;
+      --best: #6fd18c;
+      --worst: #ff8a5c;
+      --tip-bg: #f2f1ee;
+      --tip-fg: #1c1c1e;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: max(32px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom));
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font);
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    -webkit-font-smoothing: antialiased;
+  }
+  @media (min-height: 760px) {
+    body { align-items: center; }
+  }
+
+  .app {
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 18px;
+  }
+
+  /* Running indicator: a single dot, no label */
+  .status {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--rule);
+  }
+  .status[data-state="running"] { background: var(--signal); animation: blink 1.2s ease-in-out infinite; }
+  .status[data-state="paused"] { background: var(--ink-3); }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  /* Dial */
+  .dial-wrap { padding: 26px 24px 4px; }
+  .dial {
+    display: block;
+    width: min(100%, 288px);
+    margin: 0 auto;
+    overflow: visible;
+  }
+  .face { fill: var(--face); stroke: var(--rule); }
+  .tick { stroke: var(--ink-3); stroke-linecap: round; }
+  .tick.major { stroke: var(--ink); }
+  .sub-face { fill: none; stroke: var(--rule); }
+  .sub-tick { stroke: var(--ink-3); stroke-linecap: round; }
+  .hand { stroke: var(--ink); stroke-linecap: round; }
+  .needle { stroke: var(--signal); stroke-linecap: round; }
+  .pin { fill: var(--ink); }
+  .pin-dot { fill: var(--signal); }
+
+  /* Digital readout */
+  .readout {
+    padding: 12px 20px 22px;
+    text-align: center;
+  }
+  .time {
+    margin: 0;
+    line-height: 1;
+    letter-spacing: -0.035em;
+  }
+  .time-main { font-size: 54px; font-weight: 300; }
+  .time-cs { font-size: 26px; font-weight: 400; color: var(--ink-3); }
+
+  /* Controls */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 0 20px 20px;
+  }
+  .btn {
+    position: relative;
+    height: 50px;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    background: var(--face);
+    color: var(--ink);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--ink-3); }
+  .btn:active:not(:disabled) { transform: scale(0.98); }
+  .btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .btn:disabled { color: var(--ink-3); cursor: default; }
+  .btn-primary { background: var(--ink); border-color: var(--ink); color: var(--panel); }
+  .btn-primary:hover:not(:disabled) { border-color: var(--ink); background: color-mix(in srgb, var(--ink) 88%, var(--panel)); }
+  .btn-primary.is-stop,
+  .btn-primary.is-stop:hover { background: var(--signal); border-color: var(--signal); color: #1c1c1e; }
+
+  /* Shortcut tooltip — shown on hover only, never on touch */
+  .btn[data-tip]::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translate(-50%, 4px);
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--tip-bg);
+    color: var(--tip-fg);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  @media (hover: hover) {
+    .btn[data-tip]:hover::after { opacity: 1; transform: translate(-50%, 0); transition-delay: 0.4s; }
+  }
+
+  /* Laps */
+  .laps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    border-top: 1px solid var(--rule);
+  }
+  .laps:empty { display: none; }
+  .lap {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    height: 44px;
+    padding: 0 20px;
+    font-size: 15px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .lap:last-child { border-bottom: none; }
+  .lap .no { color: var(--ink-3); font-size: 13px; }
+  .lap.is-current .no::after {
+    content: "";
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    margin-left: 8px;
+    vertical-align: middle;
+    border-radius: 50%;
+    background: var(--signal);
+  }
+  .lap.is-best .split, .lap.is-best .mark { color: var(--best); }
+  .lap.is-worst .split, .lap.is-worst .mark { color: var(--worst); }
+  .mark { margin-left: 6px; font-size: 9px; vertical-align: 2px; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<main class="app">
+  <h1 class="sr-only">스톱워치</h1>
+  <span class="status" id="status" data-state="idle" role="img" aria-label="대기"></span>
+
+  <div class="dial-wrap">
+    <svg class="dial" viewBox="0 0 240 240" aria-hidden="true">
+      <circle class="face" cx="120" cy="120" r="116" stroke-width="1"/>
+      <g id="ticks"></g>
+      <circle class="sub-face" cx="120" cy="164" r="22" stroke-width="1"/>
+      <g id="subTicks"></g>
+      <line class="hand" id="minuteHand" x1="120" y1="168" x2="120" y2="146" stroke-width="1.5"/>
+      <circle class="pin" cx="120" cy="164" r="2"/>
+      <line class="needle" id="needle" x1="120" y1="142" x2="120" y2="10" stroke-width="1.5"/>
+      <circle class="pin" cx="120" cy="120" r="4.5"/>
+      <circle class="pin-dot" cx="120" cy="120" r="1.6"/>
+    </svg>
+  </div>
+
+  <div class="readout">
+    <p class="time" role="timer" aria-label="경과 시간">
+      <span class="time-main" id="timeMain">0</span><span class="time-cs" id="timeCs">.00</span>
+    </p>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="lapReset" type="button" disabled aria-keyshortcuts="L R">랩</button>
+    <button class="btn btn-primary" id="startStop" type="button" aria-keyshortcuts="Space" data-tip="Space">시작</button>
+  </div>
+
+  <ul class="laps" id="laps" aria-label="랩 기록"></ul>
+  <div class="sr-only" id="announcer" aria-live="polite"></div>
+</main>
+
+<script>
+(() => {
+  const STORAGE_KEY = 'stopwatch-state-v1';
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+
+  const $ = id => document.getElementById(id);
+  const statusEl = $('status');
+  const timeMain = $('timeMain');
+  const timeCs = $('timeCs');
+  const needle = $('needle');
+  const minuteHand = $('minuteHand');
+  const startStopBtn = $('startStop');
+  const lapResetBtn = $('lapReset');
+  const lapList = $('laps');
+  const announcer = $('announcer');
+
+  // Epoch-based monotonic clock, so a running timer survives a page reload.
+  const clock = () => performance.timeOrigin + performance.now();
+
+  let state = { running: false, startedAt: 0, elapsed: 0, lapStart: 0, laps: [] };
+  let rafId = null;
+  let lastTitleSecond = -1;
+
+  function svg(tag, attrs, parent) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    parent.appendChild(el);
+    return el;
+  }
+
+  function polar(cx, cy, r, turn) {
+    const a = turn * Math.PI * 2;
+    return [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  }
+
+  // Seconds track: 60 ticks, longer every 5s.
+  for (let i = 0; i < 60; i++) {
+    const major = i % 5 === 0;
+    const [x1, y1] = polar(120, 120, 111, i / 60);
+    const [x2, y2] = polar(120, 120, major ? 101 : 106, i / 60);
+    svg('line', { class: major ? 'tick major' : 'tick', x1, y1, x2, y2, 'stroke-width': major ? 1.4 : 0.8 }, $('ticks'));
+  }
+  // Minute sub-dial: 30 minutes per turn.
+  for (let i = 0; i < 30; i++) {
+    const major = i % 5 === 0;
+    const [x1, y1] = polar(120, 164, 21, i / 30);
+    const [x2, y2] = polar(120, 164, major ? 17 : 19, i / 30);
+    svg('line', { class: 'sub-tick', x1, y1, x2, y2, 'stroke-width': major ? 1 : 0.5 }, $('subTicks'));
+  }
+
+  function total() {
+    return state.running ? state.elapsed + (clock() - state.startedAt) : state.elapsed;
+  }
+
+  function split(ms) {
+    const totalCs = Math.floor(ms / 10);
+    const cs = totalCs % 100;
+    const totalSec = Math.floor(totalCs / 100);
+    const s = totalSec % 60;
+    const m = Math.floor(totalSec / 60) % 60;
+    const h = Math.floor(totalSec / 3600);
+    const pad = n => String(n).padStart(2, '0');
+    // Drop leading units that are zero: 7.06 → 1:07.06 → 1:01:07.06
+    const main = h > 0 ? `${h}:${pad(m)}:${pad(s)}` : m > 0 ? `${m}:${pad(s)}` : `${s}`;
+    return { main, cs: `.${pad(cs)}` };
+  }
+
+  function format(ms) {
+    const { main, cs } = split(ms);
+    return main + cs;
+  }
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function load() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (saved && Array.isArray(saved.laps)) state = { ...state, ...saved };
+    } catch (e) {}
+  }
+
+  function announce(text) {
+    announcer.textContent = text;
+  }
+
+  function frame() {
+    const t = total();
+    const { main, cs } = split(t);
+    timeMain.textContent = main;
+    timeCs.textContent = cs;
+
+    needle.setAttribute('transform', `rotate(${(t % 60000) / 60000 * 360} 120 120)`);
+    minuteHand.setAttribute('transform', `rotate(${(t % 1800000) / 1800000 * 360} 120 164)`);
+
+    const current = lapList.querySelector('.is-current .split');
+    if (current) current.textContent = format(t - state.lapStart);
+
+    const sec = Math.floor(t / 1000);
+    if (state.running && sec !== lastTitleSecond) {
+      lastTitleSecond = sec;
+      document.title = `${t < 60000 ? `${main}s` : main} — Stopwatch`;
+    }
+
+    rafId = state.running ? requestAnimationFrame(frame) : null;
+  }
+
+  function renderControls() {
+    const s = state.running ? 'running' : state.elapsed > 0 ? 'paused' : 'idle';
+    statusEl.dataset.state = s;
+    statusEl.setAttribute('aria-label', { running: '측정 중', paused: '일시정지', idle: '대기' }[s]);
+
+    startStopBtn.textContent = state.running ? '정지' : state.elapsed > 0 ? '계속' : '시작';
+    startStopBtn.classList.toggle('is-stop', state.running);
+    lapResetBtn.textContent = s === 'paused' ? '초기화' : '랩';
+    lapResetBtn.disabled = s === 'idle';
+    if (s === 'idle') lapResetBtn.removeAttribute('data-tip');
+    else lapResetBtn.dataset.tip = s === 'paused' ? 'R' : 'L';
+    if (s === 'idle') document.title = 'Stopwatch';
+  }
+
+  function renderLaps() {
+    lapList.textContent = '';
+    if (!state.running && state.elapsed === 0) return;
+
+    const row = (cls, no, mark, splitMs) => {
+      const li = document.createElement('li');
+      li.className = `lap ${cls}`.trim();
+      li.innerHTML = `<span class="no">${no}${mark}</span><span class="split">${format(splitMs)}</span>`;
+      return li;
+    };
+
+    lapList.appendChild(row('is-current', state.laps.length + 1, '', total() - state.lapStart));
+
+    let best = -1, worst = -1;
+    if (state.laps.length >= 2) {
+      best = state.laps.indexOf(Math.min(...state.laps));
+      worst = state.laps.indexOf(Math.max(...state.laps));
+    }
+    for (let i = state.laps.length - 1; i >= 0; i--) {
+      let cls = '', mark = '';
+      if (i === best) { cls = 'is-best'; mark = '<span class="mark" role="img" aria-label="최고">▲</span>'; }
+      if (i === worst) { cls = 'is-worst'; mark = '<span class="mark" role="img" aria-label="최저">▼</span>'; }
+      lapList.appendChild(row(cls, i + 1, mark, state.laps[i]));
+    }
+  }
+
+  function render() {
+    renderControls();
+    renderLaps();
+    cancelAnimationFrame(rafId);
+    frame();
+  }
+
+  function startStop() {
+    if (state.running) {
+      state.elapsed = total();
+      state.running = false;
+      announce(`정지, ${format(state.elapsed)}`);
+    } else {
+      state.startedAt = clock();
+      state.running = true;
+      announce('시작');
+    }
+    save();
+    render();
+  }
+
+  function lap() {
+    if (!state.running) return;
+    const t = total();
+    state.laps.push(t - state.lapStart);
+    state.lapStart = t;
+    announce(`랩 ${state.laps.length}, ${format(state.laps[state.laps.length - 1])}`);
+    save();
+    render();
+  }
+
+  function reset() {
+    if (state.running) return;
+    state = { running: false, startedAt: 0, elapsed: 0, lapStart: 0, laps: [] };
+    announce('초기화');
+    save();
+    render();
+  }
+
+  startStopBtn.addEventListener('click', startStop);
+  lapResetBtn.addEventListener('click', () => (state.running ? lap() : reset()));
+
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.code === 'Space') { e.preventDefault(); startStop(); }
+    else if (e.code === 'KeyL') lap();
+    else if (e.code === 'KeyR') reset();
+  });
+  // Stop a focused button from also firing its click on Space release.
+  document.addEventListener('keyup', e => {
+    if (e.code === 'Space') e.preventDefault();
+  });
+
+  load();
+  render();
+})();
+</script>
+</body>
+</html>
