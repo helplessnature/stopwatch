@@ -126,6 +126,8 @@
   }
   .btn {
     position: relative;
+    display: grid;
+    place-items: center;
     height: 50px;
     border: 1px solid var(--rule);
     border-radius: 12px;
@@ -139,6 +141,16 @@
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
+  .btn svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .btn svg .solid { fill: currentColor; stroke-width: 1.2; }
   .btn:hover:not(:disabled) { border-color: var(--ink-3); }
   .btn:active:not(:disabled) { transform: scale(0.98); }
   .btn:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
@@ -251,8 +263,8 @@
   </div>
 
   <div class="controls">
-    <button class="btn" id="lapReset" type="button" disabled aria-keyshortcuts="L R">랩</button>
-    <button class="btn btn-primary" id="startStop" type="button" aria-keyshortcuts="Space" data-tip="Space">시작</button>
+    <button class="btn" id="lapReset" type="button" disabled aria-keyshortcuts="L R" aria-label="랩"></button>
+    <button class="btn btn-primary" id="startStop" type="button" aria-keyshortcuts="Space" data-tip="Space" aria-label="시작"></button>
   </div>
 
   <ul class="laps" id="laps" aria-label="랩 기록"></ul>
@@ -274,6 +286,13 @@
   const lapResetBtn = $('lapReset');
   const lapList = $('laps');
   const announcer = $('announcer');
+
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="solid" d="M8 5.5v13l10.5-6.5z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect class="solid" x="6.5" y="5.5" width="3.8" height="13" rx="1.2"/><rect class="solid" x="13.7" y="5.5" width="3.8" height="13" rx="1.2"/></svg>',
+    lap: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 20V4.5M7 5.5h11l-2.5 3.5 2.5 3.5H7"/></svg>',
+    reset: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5M4.5 4.5v4h4"/></svg>',
+  };
 
   // Epoch-based monotonic clock, so a running timer survives a page reload.
   const clock = () => performance.timeOrigin + performance.now();
@@ -372,9 +391,11 @@
     statusEl.dataset.state = s;
     statusEl.setAttribute('aria-label', { running: '측정 중', paused: '일시정지', idle: '대기' }[s]);
 
-    startStopBtn.textContent = state.running ? '정지' : state.elapsed > 0 ? '계속' : '시작';
+    startStopBtn.innerHTML = state.running ? ICON.pause : ICON.play;
+    startStopBtn.setAttribute('aria-label', state.running ? '정지' : state.elapsed > 0 ? '계속' : '시작');
     startStopBtn.classList.toggle('is-stop', state.running);
-    lapResetBtn.textContent = s === 'paused' ? '초기화' : '랩';
+    lapResetBtn.innerHTML = s === 'paused' ? ICON.reset : ICON.lap;
+    lapResetBtn.setAttribute('aria-label', s === 'paused' ? '초기화' : '랩');
     lapResetBtn.disabled = s === 'idle';
     if (s === 'idle') lapResetBtn.removeAttribute('data-tip');
     else lapResetBtn.dataset.tip = s === 'paused' ? 'R' : 'L';
